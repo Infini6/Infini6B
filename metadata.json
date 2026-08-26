@@ -1,0 +1,6 @@
+{
+  "name": "CareSync Patient Portal",
+  "description": "Smart Hospital Queue and Patient Portal with real-time queue tracking, multi-step appointment booking, patient journey timelines, and indoor hospital navigation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
