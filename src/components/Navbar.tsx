@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   LayoutDashboard, 
   Building2, 
@@ -6,124 +8,293 @@ import {
   Bell, 
   User, 
   Plus,
-  Activity
+  Activity,
+  LogOut,
+  Settings,
+  Menu,
+  X
 } from 'lucide-react';
-import { AppTab } from '../types';
 
 interface NavbarProps {
-  currentTab: AppTab;
-  setTab: (tab: AppTab) => void;
   unreadCount: number;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentTab, setTab, unreadCount }) => {
+export const Navbar: React.FC<NavbarProps> = ({ unreadCount }) => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
   const navItems = [
-    { id: 'dashboard' as AppTab, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'hospitals' as AppTab, label: 'Hospitals', icon: Building2 },
-    { id: 'appointments' as AppTab, label: 'Appointments', icon: CalendarDays },
-    { id: 'notifications' as AppTab, label: 'Notifications', icon: Bell, badge: unreadCount },
-    { id: 'profile' as AppTab, label: 'Profile', icon: User },
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/hospitals', label: 'Hospitals', icon: Building2 },
+    { path: '/appointments', label: 'Appointments', icon: CalendarDays },
+    { path: '/notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
+    { path: '/profile', label: 'Profile', icon: User },
   ];
+
+  const handleMobileNavClick = (path: string) => {
+    setMobileMenuOpen(false);
+    navigate(path);
+  };
+
+  const handleLogoutClick = () => {
+    setMobileMenuOpen(false);
+    logout();
+  };
 
   return (
     <>
-      {/* Desktop & Top Sticky Header */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-18 flex items-center justify-between">
-          
-          {/* Brand Logo */}
-          <div 
-            id="brand-logo"
-            onClick={() => setTab('dashboard')}
-            className="flex items-center gap-3 cursor-pointer select-none group"
+      {/* 1. DESKTOP STICKY LEFT SIDEBAR */}
+      <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 flex-shrink-0 bg-white border-r border-slate-200 py-6 px-4 justify-between shadow-xs select-none">
+        
+        <div className="space-y-6">
+          {/* Brand Logo & Title */}
+          <Link 
+            to="/dashboard"
+            className="flex items-center gap-3 group cursor-pointer text-slate-800 hover:text-slate-900"
           >
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm shadow-blue-500/20 group-hover:scale-105 transition-transform duration-200">
-              <Activity className="w-5 h-5 stroke-[2.5]" />
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm shadow-blue-500/20 group-hover:scale-105 transition-transform duration-200">
+              <Activity className="w-5.5 h-5.5 stroke-[2.5]" />
             </div>
             <div>
-              <div className="font-bold text-slate-800 text-lg leading-tight tracking-tight">
-                MedFlow <span className="text-blue-600 font-semibold text-xs tracking-normal ml-1">CareSync</span>
+              <div className="font-bold text-slate-800 text-base leading-tight tracking-tight">
+                MedFlow <span className="text-blue-600 font-semibold text-[10px] tracking-normal ml-0.5">CareSync</span>
               </div>
-              <div className="text-xs text-slate-500 font-medium">
-                Smart Hospital Queue & Portal
+              <div className="text-[10px] text-slate-400 font-medium">
+                Smart Patient Portal
               </div>
             </div>
-          </div>
+          </Link>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
+          {/* Primary Navigation list */}
+          <nav className="space-y-1.5 pt-4">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = currentTab === item.id || 
-                (item.id === 'appointments' && (currentTab === 'queue' || currentTab === 'journey' || currentTab === 'navigation')) ||
-                (item.id === 'book' && currentTab === 'confirmation');
-              
               return (
-                <button
-                  key={item.id}
-                  id={`nav-link-${item.id}`}
-                  onClick={() => setTab(item.id)}
-                  className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all duration-150 cursor-pointer ${
+                <NavLink
+                  key={item.path}
+                  id={`sidebar-link-${item.label.toLowerCase()}`}
+                  to={item.path}
+                  className={({ isActive }) => `flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-semibold transition-all duration-150 cursor-pointer ${
                     isActive
                       ? 'bg-blue-50 text-blue-700 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                      : 'text-slate-655 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
-                  {item.badge && item.badge > 0 ? (
-                    <span className="ml-0.5 px-1.5 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-4 text-center leading-tight">
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </button>
+                  {({ isActive }) => (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-655'}`} />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.badge && item.badge > 0 ? (
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full min-w-5 text-center leading-tight ${
+                          isActive ? 'bg-blue-600 text-white' : 'bg-red-500 text-white'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      ) : null}
+                    </>
+                  )}
+                </NavLink>
               );
             })}
           </nav>
 
-          {/* Action Button: Book & Quick Patient Indicator */}
-          <div className="flex items-center gap-3">
-            <button
-              id="header-book-btn"
-              onClick={() => setTab('book')}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:shadow-md shadow-blue-600/20 transition-all duration-150 cursor-pointer"
+          <hr className="border-slate-100 my-4" />
+
+          {/* Secondary Navigation items */}
+          <div className="space-y-1.5">
+            <NavLink
+              id="sidebar-link-settings"
+              to="/settings"
+              className={({ isActive }) => `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-semibold transition-all duration-150 cursor-pointer ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700 shadow-xs'
+                  : 'text-slate-655 hover:text-slate-900 hover:bg-slate-50'
+              }`}
             >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Book Visit</span>
+              {({ isActive }) => (
+                <>
+                  <Settings className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <span>Settings</span>
+                </>
+              )}
+            </NavLink>
+
+            <button
+              onClick={logout}
+              className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-semibold text-slate-655 hover:text-red-650 hover:bg-red-50/50 transition-all duration-150 cursor-pointer"
+            >
+              <LogOut className="w-5 h-5 text-slate-400 hover:text-red-550" />
+              <span>Logout</span>
             </button>
           </div>
         </div>
+
+        {/* Primary CTA button at the bottom */}
+        <div className="pt-6">
+          <Link
+            id="sidebar-book-btn"
+            to="/appointments/book"
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white py-3 rounded-xl text-sm font-semibold shadow-sm hover:shadow-md shadow-blue-600/20 transition-all duration-150 cursor-pointer text-center"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>Book Visit</span>
+          </Link>
+        </div>
+      </aside>
+
+      {/* 2. MOBILE TOP HEADER */}
+      <header className="md:hidden sticky top-0 z-30 bg-white border-b border-slate-205 px-4 h-15 flex items-center justify-between shadow-xs">
+        <div className="flex items-center gap-3.5">
+          {/* Hamburger Menu Toggle */}
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="p-1.5 text-slate-600 hover:text-slate-900 active:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            aria-label="Open navigation menu"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+
+          {/* Branding */}
+          <Link to="/dashboard" className="flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-xs">
+              <Activity className="w-4.5 h-4.5 stroke-[2.5]" />
+            </div>
+            <span className="font-bold text-slate-800 text-sm tracking-tight leading-none">
+              MedFlow <span className="text-blue-600 font-semibold text-[8px] tracking-normal ml-0.5">CareSync</span>
+            </span>
+          </Link>
+        </div>
+
+        {/* Right Action Icons */}
+        <div className="flex items-center gap-2">
+          <Link
+            to="/notifications"
+            className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-all"
+            aria-label="View notifications"
+          >
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
+            )}
+          </Link>
+
+          <Link
+            to="/profile"
+            className="p-2 text-slate-505 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-all"
+            aria-label="View profile"
+          >
+            <User className="w-5 h-5" />
+          </Link>
+        </div>
       </header>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-lg">
-        <div className="flex items-center justify-around">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentTab === item.id || 
-              (item.id === 'appointments' && (currentTab === 'queue' || currentTab === 'journey' || currentTab === 'navigation'));
+      {/* 3. MOBILE COLLAPSIBLE LEFT DRAWER (SLIDE OVERLAY) */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop mask */}
+          <div 
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileMenuOpen(false)}
+          />
 
-            return (
+          {/* Slide-out drawer menu */}
+          <aside className="relative flex flex-col w-64 max-w-xs h-full bg-white shadow-xl py-6 px-4 justify-between transition-transform duration-300 ease-in-out z-10">
+            <div className="space-y-6">
+              
+              {/* Drawer header branding & close button */}
+              <div className="flex items-center justify-between">
+                <Link 
+                  to="/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5"
+                >
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-xs">
+                    <Activity className="w-5 h-5 stroke-[2.5]" />
+                  </div>
+                  <span className="font-bold text-slate-850 text-sm leading-tight tracking-tight">
+                    MedFlow <span className="text-blue-600 font-semibold text-[9px] tracking-normal ml-0.5">CareSync</span>
+                  </span>
+                </Link>
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  aria-label="Close navigation menu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Navigation list */}
+              <nav className="space-y-1 pt-3">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.path}
+                      onClick={() => handleMobileNavClick(item.path)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                        window.location.pathname === item.path
+                          ? 'bg-blue-50 text-blue-700 font-bold'
+                          : 'text-slate-655 hover:text-slate-900 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon className={`w-4.5 h-4.5 ${window.location.pathname === item.path ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.badge && item.badge > 0 ? (
+                        <span className="px-2 py-0.5 text-[9px] font-bold bg-red-500 text-white rounded-full min-w-5 text-center">
+                          {item.badge}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <hr className="border-slate-100 my-3" />
+
+              {/* Secondary operations */}
+              <div className="space-y-1">
+                <button
+                  onClick={() => handleMobileNavClick('/settings')}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                    window.location.pathname === '/settings'
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-slate-655 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Settings className={`w-4.5 h-4.5 ${window.location.pathname === '/settings' ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <span>Settings</span>
+                </button>
+
+                <button
+                  onClick={handleLogoutClick}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-655 hover:text-red-650 hover:bg-red-50/50 transition-colors cursor-pointer text-left"
+                >
+                  <LogOut className="w-4.5 h-4.5 text-slate-400" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </div>
+
+            {/* CTA action button at bottom of drawer */}
+            <div className="pt-4">
               <button
-                key={item.id}
-                id={`mobile-nav-${item.id}`}
-                onClick={() => setTab(item.id)}
-                className={`relative flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl text-xs transition-colors cursor-pointer ${
-                  isActive ? 'text-blue-600 font-semibold bg-blue-50' : 'text-slate-500 hover:text-slate-800'
-                }`}
+                onClick={() => handleMobileNavClick('/appointments/book')}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold shadow-xs cursor-pointer text-center"
               >
-                <div className="relative">
-                  <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                  {item.badge && item.badge > 0 ? (
-                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
-                  ) : null}
-                </div>
-                <span className="text-[11px]">{item.label}</span>
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Book Visit</span>
               </button>
-            );
-          })}
+            </div>
+          </aside>
         </div>
-      </div>
+      )}
     </>
   );
 };
+export default Navbar;

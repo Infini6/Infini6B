@@ -1,37 +1,89 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { appointmentApi } from '../services/appointmentApi';
+import { Appointment } from '../types';
 import { 
   Calendar, 
   Clock, 
   MapPin, 
   ArrowRight, 
-  Zap, 
-  Compass, 
   CheckCircle2, 
   XCircle, 
   AlertCircle,
-  Plus
+  Plus,
+  RefreshCw,
+  ChevronRight
 } from 'lucide-react';
-import { Appointment, AppTab } from '../types';
 
-interface AppointmentsViewProps {
-  appointments: Appointment[];
-  onSelectAppointment: (appt: Appointment) => void;
-  onCancelAppointment: (id: string) => void;
-  setTab: (tab: AppTab) => void;
-}
+export const AppointmentsView: React.FC = () => {
+  const navigate = useNavigate();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<'upcoming' | 'completed' | 'rescheduled' | 'no_show' | 'cancelled'>('upcoming');
 
-export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
-  appointments,
-  onSelectAppointment,
-  onCancelAppointment,
-  setTab,
-}) => {
-  const [activeFilter, setActiveFilter] = useState<'upcoming' | 'completed' | 'rescheduled' | 'no_show'>('upcoming');
+  const fetchAppointments = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await appointmentApi.getAppointments();
+      setAppointments(data);
+    } catch (err: any) {
+      setError(err.message || 'Unable to fetch your appointments list.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const filteredAppointments = appointments.filter((a) => a.status === activeFilter);
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
+
+  const filteredAppointments = appointments.filter((a) => {
+    // Treat 'cancelled' explicitly
+    if (activeFilter === 'cancelled') {
+      return a.status as string === 'cancelled';
+    }
+    return a.status === activeFilter;
+  });
+
+  if (loading) {
+    return (
+      <div className="space-y-6 pb-12">
+        <div className="flex justify-between items-center animate-pulse">
+          <div className="h-10 bg-slate-200 rounded-xl w-48" />
+          <div className="h-10 bg-slate-200 rounded-xl w-32" />
+        </div>
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-slate-200 h-32 rounded-3xl animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 text-center space-y-4">
+        <div className="w-14 h-14 bg-red-100 text-red-650 rounded-full flex items-center justify-center mx-auto">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800">Error Loading Appointments</h2>
+        <p className="text-slate-500 text-sm">{error}</p>
+        <button
+          onClick={fetchAppointments}
+          className="flex items-center gap-1.5 px-4.5 py-2.5 bg-blue-650 text-white font-semibold rounded-xl mx-auto cursor-pointer"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>Retry Loading</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 selection:bg-blue-100 selection:text-blue-900">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">
@@ -42,13 +94,13 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={() => setTab('book')}
+        <Link
+          to="/appointments/book"
           className="self-start sm:self-center flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm shadow-blue-600/20 transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>New Appointment</span>
-        </button>
+        </Link>
       </div>
 
       {/* Filter Tabs */}
@@ -72,7 +124,7 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
               : 'text-slate-600 hover:text-slate-900 hover:bg-white'
           }`}
         >
-          Completed
+          Completed ({appointments.filter(a => a.status === 'completed').length})
         </button>
 
         <button
@@ -83,7 +135,18 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
               : 'text-slate-600 hover:text-slate-900 hover:bg-white'
           }`}
         >
-          Rescheduled
+          Rescheduled ({appointments.filter(a => a.status === 'rescheduled').length})
+        </button>
+
+        <button
+          onClick={() => setActiveFilter('cancelled')}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            activeFilter === 'cancelled'
+              ? 'bg-blue-50 text-blue-700 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+          }`}
+        >
+          Cancelled ({appointments.filter(a => a.status as string === 'cancelled').length})
         </button>
 
         <button
@@ -94,133 +157,76 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
               : 'text-slate-600 hover:text-slate-900 hover:bg-white'
           }`}
         >
-          No Show
+          No Show ({appointments.filter(a => a.status === 'no_show').length})
         </button>
       </div>
 
-      {/* Appointment Cards List */}
-      <div className="space-y-4">
+      {/* Appointment Cards */}
+      <div className="grid grid-cols-1 gap-4">
         {filteredAppointments.map((appt) => (
           <div
             key={appt.id}
-            className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+            onClick={() => navigate(`/appointments/${appt.id}`)}
+            className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm hover:border-blue-150 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group text-left"
           >
-            <div>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800 tracking-tight">
-                    {appt.hospitalName}
-                  </h3>
-                  <p className="text-xs sm:text-sm text-slate-600 mt-0.5 font-medium">
-                    {appt.doctor} · <span className="text-slate-500">{appt.department}</span>
-                  </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {appt.service}
-                  </p>
-                </div>
-
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider flex-shrink-0 ${
-                  appt.status === 'upcoming' 
-                    ? 'bg-blue-50 text-blue-700'
-                    : appt.status === 'completed'
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {appt.status}
+            <div className="space-y-3">
+              <div>
+                <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">
+                  {appt.ref}
                 </span>
+                <h3 className="font-extrabold text-slate-800 text-base sm:text-lg mt-2 group-hover:text-blue-650 transition-colors">
+                  {appt.service}
+                </h3>
+                <p className="text-slate-500 text-xs mt-0.5">{appt.hospitalName} · {appt.department}</p>
               </div>
 
-              {/* Detail row */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-5 py-3.5 px-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs sm:text-sm">
-                <div>
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Date
-                  </span>
-                  <span className="font-bold text-slate-800 mt-0.5 block">{appt.date}</span>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-4 h-4 text-slate-400" />
+                  <span>{appt.date}</span>
                 </div>
-                <div>
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Expected consultation
-                  </span>
-                  <span className="font-bold text-slate-800 mt-0.5 block">{appt.time}</span>
+                <div className="flex items-center gap-1">
+                  <Clock className="w-4 h-4 text-slate-400" />
+                  <span>{appt.time}</span>
                 </div>
-                <div>
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Recommended arrival
-                  </span>
-                  <span className="font-bold text-slate-800 mt-0.5 block">{appt.arrival}</span>
+                <div className="flex items-center gap-1">
+                  <MapPin className="w-4 h-4 text-slate-400" />
+                  <span>Room {appt.room}</span>
                 </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-slate-500 mb-4 px-1">
-                <span>Ref: <strong className="font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{appt.ref}</strong></span>
-                <span>Room: <strong className="text-slate-700 font-semibold">{appt.room} ({appt.block})</strong></span>
               </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => {
-                  onSelectAppointment(appt);
-                  setTab('queue');
-                }}
-                className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-500" />
-                <span>Live Queue</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  onSelectAppointment(appt);
-                  setTab('journey');
-                }}
-                className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <Compass className="w-3.5 h-3.5 text-blue-600" />
-                <span>Journey</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  onSelectAppointment(appt);
-                  setTab('navigation');
-                }}
-                className="px-4 py-2 text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm shadow-blue-600/20"
-              >
-                <span>Navigate</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                onClick={() => onCancelAppointment(appt.id)}
-                className="ml-auto px-3.5 py-2 text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
+            <div className="flex items-center gap-3 self-end sm:self-center">
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                appt.status === 'upcoming'
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                  : appt.status === 'rescheduled'
+                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                  : appt.status === 'completed'
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : 'bg-red-50 text-red-700 border border-red-200'
+              }`}>
+                {appt.status}
+              </span>
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
         ))}
 
         {filteredAppointments.length === 0 && (
-          <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-3">
-            <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
-            <h3 className="text-base font-bold text-slate-800">No {activeFilter} appointments</h3>
-            <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto">
-              You don't have any appointments currently categorized as {activeFilter}.
+          <div className="bg-white rounded-3xl border border-slate-205 p-8 sm:p-12 text-center space-y-3 shadow-xs">
+            <div className="w-12 h-12 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center mx-auto">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <h3 className="font-bold text-slate-800">No Appointments Found</h3>
+            <p className="text-slate-500 text-sm max-w-xs mx-auto">
+              There are no appointments listed under the {activeFilter} status filter.
             </p>
-            {activeFilter !== 'upcoming' && (
-              <button
-                onClick={() => setActiveFilter('upcoming')}
-                className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                View upcoming appointments
-              </button>
-            )}
           </div>
         )}
       </div>
+
     </div>
   );
 };
+export default AppointmentsView;

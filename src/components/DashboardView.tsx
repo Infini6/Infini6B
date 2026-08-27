@@ -1,4 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { appointmentApi } from '../services/appointmentApi';
+import { notificationApi } from '../services/notificationApi';
+import { wsClient } from '../websocket/socket';
+import { Appointment, NotificationItem } from '../types';
+import { JOURNEY_STEP_DEFINITIONS } from '../data/mockData';
 import { 
   Calendar, 
   Clock, 
@@ -13,392 +20,349 @@ import {
   ChevronRight,
   Activity,
   Heart,
-  Timer
+  Timer,
+  AlertCircle,
+  WifiOff,
+  UserCheck
 } from 'lucide-react';
-import { Appointment, AppTab, NotificationItem, UserProfile } from '../types';
-import { JOURNEY_STEP_DEFINITIONS } from '../data/mockData';
 
-interface DashboardViewProps {
-  user: UserProfile;
-  activeAppointment: Appointment;
-  notifications: NotificationItem[];
-  setTab: (tab: AppTab) => void;
-  onSelectAppointment: (appt: Appointment) => void;
-}
+export const DashboardView: React.FC = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
-export const DashboardView: React.FC<DashboardViewProps> = ({
-  user,
-  activeAppointment,
-  notifications,
-  setTab,
-}) => {
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [activeAppointment, setActiveAppointment] = useState<Appointment | null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // WebSocket status
+  const [wsStatus, setWsStatus] = useState(() => wsClient.getConnectivity());
+
+  useEffect(() => {
+    // Load dashboard stats
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        const appts = await appointmentApi.getAppointments();
+        const activeAppts = appts.filter(a => a.status === 'upcoming' || a.status === 'rescheduled');
+        setAppointments(appts);
+        
+        if (activeAppts.length > 0) {
+          // Pick the first upcoming appointment
+          setActiveAppointment(activeAppts[0]);
+        } else if (appts.length > 0) {
+          setActiveAppointment(appts[0]);
+        }
+
+        const notifs = await notificationApi.getNotifications();
+        setNotifications(notifs);
+
+      } catch (err: any) {
+        setError(err.message || 'Failed to load dashboard statistics.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStats();
+
+    // Subscribe to WebSocket status changes
+    const unsubStatus = wsClient.subscribe('connection_status', (_, data) => {
+      setWsStatus(data);
+    });
+
+    // Subscribe to live queue/journey updates for current active appointment
+    const unsubQueue = wsClient.subscribe('queue_update', (_, data) => {
+      setActiveAppointment(prev => {
+        if (prev && prev.id === data.appointmentId) {
+          return {
+            ...prev,
+            position: data.position,
+            currentlyServing: data.currentlyServing,
+            estimatedWait: data.estimatedWait
+          };
+        }
+        return prev;
+      });
+    });
+
+    const unsubJourney = wsClient.subscribe('journey_update', (_, data) => {
+      setActiveAppointment(prev => {
+        if (prev && prev.id === data.appointmentId) {
+          return {
+            ...prev,
+            journeyStep: data.journeyStep
+          };
+        }
+        return prev;
+      });
+    });
+
+    return () => {
+      unsubStatus();
+      unsubQueue();
+      unsubJourney();
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-6 pb-12">
+        <div className="h-10 bg-slate-200 rounded-xl w-48 animate-pulse" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-slate-200 h-28 rounded-3xl" />
+          ))}
+        </div>
+        <div className="bg-slate-200 h-64 rounded-3xl animate-pulse" />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 selection:bg-blue-100 selection:text-blue-900">
+      
       {/* Header Greeting Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">
-            Good day, {user.name}
+            Good day, {user?.name}
           </h1>
           <p className="text-slate-500 text-sm mt-0.5">
             Your patient overview and live queue status for today
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-semibold text-slate-800">{user.name}</p>
-            <p className="text-xs text-slate-500">ID: #4492-00</p>
-          </div>
-          <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-sm border border-blue-200">
-            {user.name.charAt(0).toUpperCase()}
-          </div>
-        </div>
-      </div>
-
-      {/* 4 Sleek Status Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <p className="text-slate-500 text-sm mb-1 font-medium">Queue Position</p>
-          <h3 className="text-3xl font-bold text-slate-800">
-            #{activeAppointment.position}{' '}
-            <span className="text-sm font-normal text-slate-400">in line</span>
-          </h3>
-          <div className="mt-2 text-xs text-green-600 font-semibold flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-            Live Active Token
-          </div>
-        </div>
-
-        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <p className="text-slate-500 text-sm mb-1 font-medium">Estimated Wait</p>
-          <h3 className="text-3xl font-bold text-slate-800">
-            {activeAppointment.estimatedWait}
-          </h3>
-          <div className="mt-2 text-xs text-blue-600 font-semibold flex items-center gap-1">
-            <Timer className="w-3.5 h-3.5" />
-            On Schedule
-          </div>
-        </div>
-
-        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <p className="text-slate-500 text-sm mb-1 font-medium">Currently Serving</p>
-          <h3 className="text-3xl font-bold text-slate-800">
-            #{activeAppointment.currentlyServing}
-          </h3>
-          <div className="mt-2 text-xs text-slate-500 flex items-center gap-1 font-medium">
-            Room {activeAppointment.room}
-          </div>
-        </div>
-
-        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <p className="text-slate-500 text-sm mb-1 font-medium">Journey Stage</p>
-          <h3 className="text-3xl font-bold text-slate-800">
-            {activeAppointment.journeyStep}{' '}
-            <span className="text-base font-normal text-slate-400">/ 7</span>
-          </h3>
-          <div className="mt-2 text-xs text-blue-600 font-semibold flex items-center gap-1">
-            {JOURNEY_STEP_DEFINITIONS.find(s => s.id === activeAppointment.journeyStep)?.name || 'Check-in'}
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Action Navigation Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button
-          id="quick-tile-book"
-          onClick={() => setTab('book')}
-          className="bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 text-slate-800 font-semibold text-sm transition-all duration-150 shadow-sm hover:border-blue-300 cursor-pointer group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <Plus className="w-5 h-5 stroke-[2.5]" />
-          </div>
-          <span>Book Visit</span>
-        </button>
-
-        <button
-          id="quick-tile-appointments"
-          onClick={() => setTab('appointments')}
-          className="bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 text-slate-800 font-semibold text-sm transition-all duration-150 shadow-sm hover:border-blue-300 cursor-pointer group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <CalendarDays className="w-5 h-5" />
-          </div>
-          <span>Appointments</span>
-        </button>
-
-        <button
-          id="quick-tile-navigation"
-          onClick={() => setTab('navigation')}
-          className="bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 text-slate-800 font-semibold text-sm transition-all duration-150 shadow-sm hover:border-blue-300 cursor-pointer group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <NavIcon className="w-5 h-5" />
-          </div>
-          <span>Navigation</span>
-        </button>
-
-        <button
-          id="quick-tile-notifications"
-          onClick={() => setTab('notifications')}
-          className="bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 text-slate-800 font-semibold text-sm transition-all duration-150 shadow-sm hover:border-blue-300 cursor-pointer group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <Bell className="w-5 h-5" />
-          </div>
-          <span>Notifications</span>
-        </button>
-      </div>
-
-      {/* Main 2-Column Info Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* Next Appointment Card (Col 7) */}
-        <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-                <Calendar className="w-4 h-4 text-blue-600" />
-                <span>Next Appointment</span>
-              </div>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">
-                Upcoming
-              </span>
-            </div>
+        {/* WebSocket Connection Warning */}
+        {!wsStatus.connected && (
+          <div className="bg-orange-50 border border-orange-200 rounded-2xl px-4 py-2.5 flex items-center gap-2 text-orange-700 text-xs sm:text-sm shadow-xs max-w-fit">
+            <WifiOff className="w-4 h-4 text-orange-500 flex-shrink-0" />
+            <span>Live updates temporarily unavailable (Last checked: {wsStatus.lastUpdated})</span>
+          </div>
+        )}
+      </div>
 
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 bg-blue-50 border border-blue-100 rounded-2xl flex flex-col items-center justify-center flex-shrink-0 text-blue-700">
-                <span className="text-[10px] font-bold uppercase tracking-wider">AUG</span>
-                <span className="text-xl font-bold leading-none">27</span>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-slate-800 tracking-tight">
-                  {activeAppointment.hospitalName}
-                </h3>
-                <p className="text-sm text-slate-600 font-medium mt-0.5">
-                  {activeAppointment.doctor} · <span className="text-slate-500">{activeAppointment.department}</span>
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {activeAppointment.service}
-                </p>
+      {activeAppointment ? (
+        <>
+          {/* Active Status KPI Metrics */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
+              <p className="text-slate-500 text-xs sm:text-sm mb-1 font-medium">Queue Position</p>
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-850">
+                #{activeAppointment.position}{' '}
+                <span className="text-xs sm:text-sm font-normal text-slate-400">in line</span>
+              </h3>
+              <div className="mt-2 text-xs text-green-600 font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-ping" />
+                Live Active Token
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 my-5 py-3.5 px-4 bg-slate-50 rounded-2xl border border-slate-100">
-              <div>
-                <div className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
-                  Expected consultation
-                </div>
-                <div className="text-sm sm:text-base font-bold text-slate-800 mt-0.5">
-                  {activeAppointment.time}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
-                  Recommended arrival
-                </div>
-                <div className="text-sm sm:text-base font-bold text-slate-800 mt-0.5">
-                  {activeAppointment.arrival}
-                </div>
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
+              <p className="text-slate-500 text-xs sm:text-sm mb-1 font-medium">Estimated Wait</p>
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-850">
+                {activeAppointment.estimatedWait}
+              </h3>
+              <div className="mt-2 text-xs text-blue-600 font-semibold flex items-center gap-1">
+                <Timer className="w-3.5 h-3.5" />
+                On Schedule
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-4 px-1">
-              <span>Date: <strong className="text-slate-700 font-semibold">{activeAppointment.date}</strong></span>
-              <span>Ref: <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{activeAppointment.ref}</span></span>
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
+              <p className="text-slate-500 text-xs sm:text-sm mb-1 font-medium">Currently Serving</p>
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-850">
+                #{activeAppointment.currentlyServing}
+              </h3>
+              <div className="mt-2 text-xs text-slate-500 flex items-center gap-1 font-medium">
+                Room {activeAppointment.room}
+              </div>
+            </div>
+
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm">
+              <p className="text-slate-500 text-xs sm:text-sm mb-1 font-medium">Journey Stage</p>
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-855">
+                {activeAppointment.journeyStep}{' '}
+                <span className="text-xs sm:text-sm font-normal text-slate-400">/ 7</span>
+              </h3>
+              <div className="mt-2 text-xs text-blue-600 font-semibold flex items-center gap-1">
+                {JOURNEY_STEP_DEFINITIONS.find(s => s.id === activeAppointment.journeyStep)?.name || 'Check-in'}
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center flex-wrap gap-2.5 pt-4 border-t border-slate-100">
-            <button
-              id="dashboard-view-queue-btn"
-              onClick={() => setTab('queue')}
-              className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+          {/* Next Scheduled Appointment Widget */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 sm:p-8 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <span className="text-[10px] font-bold text-blue-650 uppercase tracking-widest bg-blue-50 px-2.5 py-1 rounded-lg">
+                    Next Active Visit
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 mt-2.5 tracking-tight leading-tight">
+                    {activeAppointment.service}
+                  </h2>
+                  <p className="text-slate-500 text-xs sm:text-sm mt-0.5">{activeAppointment.hospitalName}</p>
+                </div>
+                <Link
+                  to={`/appointments/${activeAppointment.id}`}
+                  className="self-start sm:self-center flex items-center gap-1.5 text-xs sm:text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  <span>Manage Appointment</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+
+              {/* Consultation Details */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-6 border-t border-slate-100">
+                <div className="flex items-start gap-2.5">
+                  <Clock className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Estimated Consultation Window</p>
+                    <p className="font-bold text-slate-800 text-sm mt-1">{activeAppointment.time}</p>
+                    <span className="text-[10px] text-slate-450 mt-1 inline-block">Estimated window; not a guarantee.</span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <Calendar className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Scheduled Date</p>
+                    <p className="font-bold text-slate-800 text-sm mt-1">{activeAppointment.date}</p>
+                    <p className="text-[10px] text-blue-600 font-semibold mt-1">Recommended Arrival: {activeAppointment.arrival}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5">
+                  <MapPin className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Consultation Room</p>
+                    <p className="font-bold text-slate-800 text-sm mt-1">Room {activeAppointment.room}</p>
+                    <p className="text-[10px] text-slate-500 mt-1">{activeAppointment.block} · {activeAppointment.floor}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Direct links to routing pages */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <Link
+                  to={`/queue/${activeAppointment.id}`}
+                  className="flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-sm shadow-blue-500/10 transition-all cursor-pointer"
+                >
+                  <Zap className="w-4 h-4 fill-white" />
+                  <span>Track Live Queue</span>
+                </Link>
+
+                <Link
+                  to={`/journey/${activeAppointment.id}`}
+                  className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold rounded-2xl border border-slate-205 transition-colors cursor-pointer"
+                >
+                  <UserCheck className="w-4 h-4 text-slate-500" />
+                  <span>Patient Journey</span>
+                </Link>
+
+                <Link
+                  to={`/navigation/${activeAppointment.id}`}
+                  className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold rounded-2xl border border-slate-205 transition-colors cursor-pointer"
+                >
+                  <NavIcon className="w-4 h-4 text-slate-500" />
+                  <span>Indoor Navigation</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Empty Dashboard State */
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center space-y-4 shadow-sm">
+          <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+            <CalendarDays className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800">No Upcoming Visits</h2>
+          <p className="text-slate-500 text-sm max-w-sm mx-auto">
+            You don't have any appointments booked for today. Search for available hospitals and schedule a consultation now.
+          </p>
+          <div className="pt-2">
+            <Link
+              to="/appointments/book"
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-sm font-semibold shadow-sm transition-all cursor-pointer"
             >
-              Live Queue
-            </button>
-            <button
-              id="dashboard-journey-btn"
-              onClick={() => setTab('journey')}
-              className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
-            >
-              Journey
-            </button>
-            <button
-              id="dashboard-navigate-btn"
-              onClick={() => setTab('navigation')}
-              className="ml-auto flex items-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-xl shadow-sm shadow-blue-600/20 transition-all cursor-pointer"
-            >
-              <span>Navigate</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>Book Appointment</span>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Alerts and Announcements Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Quick Health Card */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2.5">
+              <Heart className="w-5 h-5 text-red-500 fill-red-500" />
+              <h3 className="font-bold text-slate-800 text-base">Digital Health Card</h3>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Show this barcode at hospital kiosks to quickly scan and verify your arrival check-in.
+            </p>
+          </div>
+
+          {/* Simple Mock Barcode */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center mt-6">
+            <div className="font-mono text-sm tracking-widest text-slate-400 font-bold bg-white border border-slate-200 py-3.5 rounded-xl">
+              ||| | |||| || ||| | |||
+            </div>
+            <p className="text-[10px] text-slate-550 font-bold mt-2">PATIENT_ID: 4492-00</p>
           </div>
         </div>
 
-        {/* Live Queue Card (Col 5) */}
-        <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-                <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
-                <span>Live Queue Status</span>
-              </div>
-              <button
-                onClick={() => setTab('queue')}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-0.5 cursor-pointer"
+        {/* Notifications and Alerts Brief Panel */}
+        <div className="lg:col-span-2 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+              <Bell className="w-5 h-5 text-blue-600" />
+              <span>Recent Alerts</span>
+            </h3>
+            <Link
+              to="/notifications"
+              className="text-xs font-bold text-blue-600 hover:text-blue-750 hover:underline"
+            >
+              View All
+            </Link>
+          </div>
+
+          <div className="space-y-3">
+            {notifications.slice(0, 3).map((notif) => (
+              <div
+                key={notif.id}
+                onClick={() => {
+                  if (notif.ref) navigate(`/appointments/${notif.ref}`);
+                }}
+                className={`p-3 rounded-2xl flex items-start gap-3 transition-colors cursor-pointer ${
+                  notif.unread ? 'bg-blue-50/40 hover:bg-blue-50/70' : 'hover:bg-slate-50'
+                }`}
               >
-                <span>Full screen</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {/* Your position box */}
-              <div className="bg-blue-600 text-white rounded-2xl p-5 shadow-sm">
-                <div className="text-xs font-medium text-blue-100">
-                  Your position
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  notif.unread ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <Calendar className="w-4 h-4" />
                 </div>
-                <div className="text-3xl sm:text-4xl font-extrabold mt-1 tracking-tight">
-                  #{activeAppointment.position}
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-800 truncate">{notif.title}</h4>
+                  <p className="text-[11px] sm:text-xs text-slate-550 mt-0.5 line-clamp-1">{notif.body}</p>
                 </div>
-                <div className="text-[10px] text-blue-200 mt-2 font-medium">
-                  Active in line
-                </div>
+                <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap mt-1">{notif.time}</span>
               </div>
-
-              {/* Currently serving box */}
-              <div className="bg-slate-50 text-slate-900 rounded-2xl p-5 border border-slate-200">
-                <div className="text-xs font-medium text-slate-500">
-                  Currently serving
-                </div>
-                <div className="text-3xl sm:text-4xl font-extrabold mt-1 text-slate-800 tracking-tight">
-                  #{activeAppointment.currentlyServing}
-                </div>
-                <div className="text-[10px] text-slate-400 mt-2 font-medium">
-                  Room {activeAppointment.room}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between py-3 px-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs sm:text-sm">
-              <span className="text-slate-500 font-medium">Estimated wait time</span>
-              <span className="font-bold text-slate-800">{activeAppointment.estimatedWait}</span>
-            </div>
-          </div>
-
-          <div className="pt-4 text-right">
-            <button
-              onClick={() => setTab('queue')}
-              className="text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-            >
-              Open live queue tracker →
-            </button>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Patient Journey Strip Section */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-800">
-              Patient Journey Timeline
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">7-checkpoint hospital navigation progress</p>
-          </div>
-          <button
-            onClick={() => setTab('journey')}
-            className="text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-          >
-            View full journey →
-          </button>
-        </div>
-
-        <div className="overflow-x-auto pt-2 pb-1">
-          <div className="flex items-center justify-between min-w-[620px]">
-            {JOURNEY_STEP_DEFINITIONS.map((step, idx) => {
-              const isCurrent = step.id === activeAppointment.journeyStep;
-              const isPassed = step.id < activeAppointment.journeyStep;
-              
-              return (
-                <React.Fragment key={step.id}>
-                  <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setTab('journey')}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      isCurrent 
-                        ? 'bg-blue-600 text-white ring-4 ring-blue-100 shadow-sm'
-                        : isPassed
-                        ? 'bg-green-600 text-white'
-                        : 'bg-slate-100 text-slate-500 border border-slate-200'
-                    }`}>
-                      {isPassed ? <CheckCircle2 className="w-4 h-4" /> : step.id}
-                    </div>
-                    <span className={`text-xs font-semibold whitespace-nowrap ${
-                      isCurrent ? 'text-blue-700 font-bold' : isPassed ? 'text-slate-800' : 'text-slate-500'
-                    }`}>
-                      {step.name}
-                    </span>
-                  </div>
-
-                  {idx < JOURNEY_STEP_DEFINITIONS.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-2 min-w-4 ${
-                      step.id < activeAppointment.journeyStep ? 'bg-green-500' : 'bg-slate-200'
-                    }`} />
-                  )}
-                </React.Fragment>
-              );
-            })}
+            ))}
+            {notifications.length === 0 && (
+              <p className="text-xs text-slate-400 py-2">No recent alerts or notifications.</p>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Recent Notifications Table/List Section */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-800">
-              Recent Updates & Alerts
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Real-time status updates regarding your booking</p>
-          </div>
-          <button
-            onClick={() => setTab('notifications')}
-            className="text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-          >
-            All notifications →
-          </button>
-        </div>
-
-        <div className="divide-y divide-slate-100">
-          {notifications.slice(0, 3).map((notif) => (
-            <div 
-              key={notif.id}
-              onClick={() => setTab('notifications')}
-              className="py-4 hover:bg-slate-50 rounded-2xl px-3 transition-colors cursor-pointer flex items-start gap-4"
-            >
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Calendar className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-bold text-slate-800">
-                    {notif.title}
-                  </h4>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-medium">{notif.time}</span>
-                    {notif.unread && (
-                      <span className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" />
-                    )}
-                  </div>
-                </div>
-                <p className="text-xs sm:text-sm text-slate-600 mt-0.5 leading-relaxed">
-                  {notif.body}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
     </div>
   );
 };
+export default DashboardView;

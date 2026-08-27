@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { 
   User, 
   Mail, 
@@ -12,34 +14,50 @@ import {
   Check, 
   HeartHandshake, 
   CalendarDays,
-  Sparkles
+  Sparkles,
+  ArrowLeft
 } from 'lucide-react';
-import { UserProfile, AppTab } from '../types';
+import { UserProfile } from '../types';
 
-interface ProfileViewProps {
-  user: UserProfile;
-  onUpdateProfile: (updated: UserProfile) => void;
-  setTab: (tab: AppTab) => void;
-}
+export const ProfileView: React.FC = () => {
+  const { user, updateUserProfile, logout } = useAuth();
+  const navigate = useNavigate();
 
-export const ProfileView: React.FC<ProfileViewProps> = ({
-  user,
-  onUpdateProfile,
-  setTab,
-}) => {
-  const [formData, setFormData] = useState<UserProfile>(user);
+  const [formData, setFormData] = useState<UserProfile>(() => {
+    return user || {
+      name: '',
+      email: '',
+      phone: '',
+      address: '',
+      emergencyContact: '',
+      bloodGroup: '',
+      age: 25
+    };
+  });
+  
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [showModal, setShowModal] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateProfile(formData);
+    updateUserProfile(formData);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
 
+  if (!user) return null;
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-16">
+    <div className="max-w-2xl mx-auto space-y-6 pb-16 selection:bg-blue-100 selection:text-blue-900">
+      
+      {/* Top Back Link */}
+      <button
+        onClick={() => navigate(-1)}
+        className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Back</span>
+      </button>
+
       {/* Profile Header Card */}
       <div className="flex items-center gap-4 bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-sm">
         <div className="w-16 h-16 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-2xl sm:text-3xl flex-shrink-0 border border-blue-200">
@@ -60,6 +78,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </div>
 
+      {savedSuccess && (
+        <div className="p-4 bg-green-50 border border-green-200 rounded-2xl flex items-center gap-2.5 text-green-800 text-sm font-semibold">
+          <Check className="w-5 h-5 text-green-600" />
+          <span>Profile updated successfully!</span>
+        </div>
+      )}
+
       {/* Personal Information Form Card */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm">
         <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-4">
@@ -75,9 +100,35 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              className="w-full px-4 py-3 bg-white border border-slate-205 rounded-2xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               required
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                Age
+              </label>
+              <input
+                type="number"
+                value={formData.age}
+                onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
+                className="w-full px-4 py-3 bg-white border border-slate-205 rounded-2xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                Blood Group
+              </label>
+              <input
+                type="text"
+                value={formData.bloodGroup}
+                onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                className="w-full px-4 py-3 bg-white border border-slate-205 rounded-2xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              />
+            </div>
           </div>
 
           <div>
@@ -89,7 +140,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               placeholder="+91 ..."
-              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              className="w-full px-4 py-3 bg-white border border-slate-205 rounded-2xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
             />
           </div>
 
@@ -101,121 +152,65 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               type="text"
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              placeholder="Home address"
-              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              className="w-full px-4 py-3 bg-white border border-slate-205 rounded-2xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
             />
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-              Emergency Contact
+              Emergency Contact Details
             </label>
             <input
               type="text"
               value={formData.emergencyContact}
               onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
-              placeholder="Name and phone number"
-              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              placeholder="e.g. Suresh Kumar - +91 98402 34567"
+              className="w-full px-4 py-3 bg-white border border-slate-205 rounded-2xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
             />
           </div>
 
-          <div className="pt-2 flex items-center gap-3">
+          <div className="flex justify-end pt-4">
             <button
               type="submit"
-              id="save-profile-btn"
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-sm shadow-blue-600/20 transition-all cursor-pointer flex items-center gap-2"
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-2xl shadow-sm transition-all cursor-pointer"
             >
-              {savedSuccess ? <Check className="w-4 h-4 stroke-[3]" /> : null}
-              <span>{savedSuccess ? 'Changes saved!' : 'Save changes'}</span>
+              Save Changes
             </button>
-            {savedSuccess && (
-              <span className="text-xs text-green-600 font-semibold">
-                Profile updated successfully.
-              </span>
-            )}
           </div>
         </form>
       </div>
 
-      {/* Menu / Settings list Card */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-2 sm:p-3 shadow-sm divide-y divide-slate-100">
-        <button
-          onClick={() => setTab('appointments')}
-          className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 rounded-2xl transition-colors cursor-pointer text-slate-800 text-sm font-semibold text-left"
-        >
-          <div className="flex items-center gap-3">
-            <CalendarDays className="w-4 h-4 text-slate-500" />
-            <span>My appointments</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-400" />
-        </button>
+      {/* Account Settings Menu */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-4">
+        <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-2">
+          Account Operations
+        </h2>
 
-        <button
-          onClick={() => setShowModal('Notification Settings')}
-          className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 rounded-2xl transition-colors cursor-pointer text-slate-800 text-sm font-semibold text-left"
-        >
-          <div className="flex items-center gap-3">
-            <Bell className="w-4 h-4 text-slate-500" />
-            <span>Notification settings</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-400" />
-        </button>
-
-        <button
-          onClick={() => setShowModal('Security & Privacy')}
-          className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 rounded-2xl transition-colors cursor-pointer text-slate-800 text-sm font-semibold text-left"
-        >
-          <div className="flex items-center gap-3">
-            <Shield className="w-4 h-4 text-slate-500" />
-            <span>Security & privacy</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-400" />
-        </button>
-
-        <button
-          onClick={() => setShowModal('App Preferences')}
-          className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 rounded-2xl transition-colors cursor-pointer text-slate-800 text-sm font-semibold text-left"
-        >
-          <div className="flex items-center gap-3">
-            <Settings className="w-4 h-4 text-slate-500" />
-            <span>App settings</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-400" />
-        </button>
-
-        <button
-          onClick={() => {
-            alert('Logged out securely. Session cleared.');
-          }}
-          className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-red-50 rounded-2xl transition-colors cursor-pointer text-red-600 text-sm font-semibold text-left"
-        >
-          <div className="flex items-center gap-3">
-            <LogOut className="w-4 h-4 text-red-500" />
-            <span>Log out</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-red-400" />
-        </button>
-      </div>
-
-      {/* Simple Settings Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-xl space-y-4 border border-slate-200">
-            <h3 className="text-lg font-bold text-slate-800">{showModal}</h3>
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              All settings for {showModal.toLowerCase()} are synced and active for patient <strong className="text-slate-800">{formData.name}</strong>.
-            </p>
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setShowModal(null)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-sm shadow-blue-600/20"
-              >
-                Close
-              </button>
+        <div className="space-y-2">
+          <button 
+            onClick={() => navigate('/settings')}
+            className="w-full flex items-center justify-between p-3.5 hover:bg-slate-50 rounded-2xl text-left text-slate-700 text-sm font-semibold transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <Settings className="w-5 h-5 text-slate-450" />
+              <span>Configure Notification Preferences</span>
             </div>
-          </div>
+            <ChevronRight className="w-5 h-5 text-slate-400" />
+          </button>
+
+          <button 
+            onClick={logout}
+            className="w-full flex items-center justify-between p-3.5 hover:bg-red-50 text-red-650 rounded-2xl text-left text-sm font-semibold transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <LogOut className="w-5 h-5 text-red-500" />
+              <span>Sign out of portal session</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-red-400" />
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 };
+export default ProfileView;
